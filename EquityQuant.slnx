@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/EquityQuant.Api/EquityQuant.Api.csproj" />
+    <Project Path="src/EquityQuant.Application/EquityQuant.Application.csproj" />
+    <Project Path="src/EquityQuant.Domain/EquityQuant.Domain.csproj" />
+    <Project Path="src/EquityQuant.Pricing/EquityQuant.Pricing.csproj" />
+    <Project Path="src/EquityQuant.Web/EquityQuant.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/EquityQuant.Tests/EquityQuant.Tests.csproj" />
+  </Folder>
+</Solution>

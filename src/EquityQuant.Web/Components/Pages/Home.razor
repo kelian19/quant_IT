@@ -1,0 +1,65 @@
+@page "/"
+@rendermode InteractiveServer
+<PageTitle>Equity Quant Workbench</PageTitle>
+<header><span>QUANT_IT / EQUITY MARKETS</span><span class="badge">DÉMONSTRATION SYNTHÉTIQUE</span></header>
+<main><h1>Equity Quant Workbench</h1><p class="lead">Valoriser, comprendre les risques et expliquer les variations de valeur.</p>
+<p>Options européennes · Black–Scholes–Merton · taux et dividende continus constants · ACT/365F</p>
+<section><h2>Importer des quotes de marché</h2><p>CSV strict, séparateur virgule, décimales avec point. Un horodatage UTC par snapshot ; 1 000 quotes maximum. L’import calibre chaque volatilité et rejette le fichier entier en cas d’erreur. Les données restent en mémoire.</p><label>CSV <textarea rows="5" style="width:100%" @bind="csv"></textarea></label><button disabled="@(!ready)" @onclick="Import">Valider et calibrer le snapshot</button>
+@if(snapshot is not null){<p>Snapshot SHA-256 : @snapshot.Id</p><table><thead><tr><th>Symbole</th><th>UTC</th><th>Strike</th><th>Prix</th><th>Vol. implicite</th><th>Ticket</th></tr></thead><tbody>@foreach(var q in snapshot.Quotes){<tr><td>@q.Symbol</td><td>@q.AsOf.ToString("u")</td><td>@F(q.Strike)</td><td>@F(q.Price)</td><td>@F(q.ImpliedVolatility*100) %</td><td><button disabled="@(!ready)" @onclick="()=>LoadQuote(q)">Charger</button></td></tr>}</tbody></table>}
+</section>
+<section><h2>Ticket de valorisation</h2><div class="inputs">
+<label>Type <select @bind="call"><option value="true">Call</option><option value="false">Put</option></select></label>
+<label>Spot <input type="number" step="any" @bind="spot" /></label>
+<label>Strike <input type="number" step="any" @bind="strike" /></label>
+<label>Maturité (années) <input type="number" step="any" @bind="years" /></label>
+<label>Taux (%) <input type="number" step="any" @bind="rate" /></label>
+<label>Dividende (%) <input type="number" step="any" @bind="dividend" /></label>
+<label>Volatilité (%) <input type="number" step="any" @bind="vol" /></label>
+</div><button disabled="@(!ready)" @onclick="Calculate">Calculer et actualiser les analyses</button></section>
+@if(error is not null){<p role="alert" class="error">@error</p>}
+@if(result is not null){
+<section><h2>Prix et sensibilités</h2><p>Calculé le @stamp · modèle @result.Model · par unité, sans multiplicateur de contrat.</p><div class="metrics">
+@foreach(var item in new[]{("Prix",result.Price),("Delta",result.Delta),("Gamma",result.Gamma),("Vega / 1 %",result.Vega),("Theta / jour",result.Theta),("Rho / 1 %",result.Rho)}){<article><span>@item.Item1</span><strong>@F(item.Item2)</strong></article>}
+</div><p>@result.Units</p></section>
+<section><h2>Scénarios de spot</h2>
+<svg viewBox="0 0 640 180" role="img" aria-label="Prix de l’option selon les chocs de spot" style="width:100%;max-height:240px">
+<line x1="20" y1="160" x2="620" y2="160" stroke="#657d9c" />
+<polyline points="@ScenarioPoints()" fill="none" stroke="#62e2c2" stroke-width="3" />
+</svg><p>Autres paramètres constants. Les chocs sont appliqués au ticket calculé.</p><table><thead><tr><th>Choc</th><th>Spot</th><th>Prix</th><th>Variation</th></tr></thead><tbody>
+@foreach(var i in Enumerable.Range(-5,11)){var s=current with {Spot=current.Spot*(1+i*.02)};var p=BlackScholes.Calculate(s).Price;<tr><td>@(i*2) %</td><td>@F(s.Spot)</td><td>@F(p)</td><td>@F(p-result.Price)</td></tr>}
+</tbody></table></section>
+<section><h2>Volatilité implicite</h2><label>Prix observé <input type="number" step="any" @bind="marketPrice" /></label><button disabled="@(!ready)" @onclick="Calibrate">Calibrer sur le ticket calculé</button>
+@if(implied is not null){<p role="status">Volatilité implicite : @F(implied.Value*100) %</p>}
+</section>
+<section><h2>Explication du P&amp;L</h2><p>Unité de position constante, même contrat. Comparaison au ticket calculé ; aucune transaction intermédiaire.</p><div class="inputs">
+<label>Nouveau spot <input type="number" step="any" @bind="endSpot" /></label>
+<label>Nouvelle volatilité (%) <input type="number" step="any" @bind="endVol" /></label>
+<label>Jours écoulés (ACT/365F) <input type="number" step="any" @bind="days" /></label></div>
+<button disabled="@(!ready)" @onclick="Explain">Expliquer</button>
+@if(pnl is not null){<dl>@foreach(var row in new[]{("P&L exact",pnl.Exact),("Delta",pnl.Delta),("Gamma",pnl.Gamma),("Vega",pnl.Vega),("Theta",pnl.Theta),("Rho",pnl.Rho),("Dividende",pnl.Dividend),("Résiduel",pnl.Residual)}){<dt>@row.Item1</dt><dd>@F(row.Item2)</dd>}</dl><p>Le résiduel conserve les effets non linéaires et croisés. L’attribution n’est pas une revalorisation exacte par facteur.</p>}
+</section>
+<section><h2>Backtest de couverture delta</h2><p>Option vendue, couverture achetée, rééquilibrage quotidien à chaque observation. Trajectoire synthétique fixe de 21 points sur 20 jours, indépendante de la maturité du ticket. Aucun résultat de rentabilité réelle.</p><label>Coût de transaction (bps) <input type="number" step="any" @bind="costBps" /></label><button disabled="@(!ready)" @onclick="Hedge">Simuler 20 jours</button>
+@if(backtest is not null){<p>Erreur de couverture finale : <b>@F(backtest.TerminalError)</b> · P&amp;L sans couverture : @F(backtest.UnhedgedPnl) · Frais cumulés : @F(backtest.TotalCosts)</p><table><thead><tr><th>Jour</th><th>Spot</th><th>Delta</th><th>Cash</th><th>Valeur couverture</th><th>Frais</th></tr></thead><tbody>@foreach(var s in backtest.Steps){<tr><td>@s.Day</td><td>@F(s.Spot)</td><td>@F(s.Delta)</td><td>@F(s.Cash)</td><td>@F(s.HedgeValue)</td><td>@F(s.Costs)</td></tr>}</tbody></table>}
+</section>
+<section><h2>Exporter le ticket calculé</h2><p>Copier ce JSON pour reproduire le prix via POST /api/v1/pricing.</p><a download="pricing-ticket.json" href="@TicketDownload()">Télécharger le ticket JSON</a><pre>@System.Text.Json.JsonSerializer.Serialize(current,new System.Text.Json.JsonSerializerOptions{WriteIndented=true})</pre></section>
+}
+<footer>Prototype de recherche · pas d’ordre de marché · données en mémoire · aucun stockage client. Greeks aux limites selon conventions explicites du moteur.</footer></main>
+@code {
+ string csv="asOf,symbol,spot,rate,dividend,strike,years,isCall,price\n2026-11-02T09:00:00Z,SYNTH,100,0.05,0,100,1,true,10.450583572";
+ MarketSnapshot? snapshot;
+ void LoadQuote(MarketQuote q){spot=q.Spot;strike=q.Strike;years=q.Years;rate=q.Rate*100;dividend=q.Dividend*100;vol=q.ImpliedVolatility*100;call=q.IsCall;Calculate();}
+ string TicketDownload()=>"data:application/json;base64,"+Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(current)));
+ string ScenarioPoints(){var prices=Enumerable.Range(-5,11).Select(i=>BlackScholes.Calculate(current with {Spot=current.Spot*(1+i*.02)}).Price).ToArray();double min=prices.Min(),range=Math.Max(prices.Max()-min,1e-8);return string.Join(" ",prices.Select((v,i)=>$"{20+i*60},{(160-(v-min)/range*140).ToString(CultureInfo.InvariantCulture)}"));}
+ void Import(){snapshot=null;Attempt(()=>snapshot=MarketData.Import(csv));}
+ double spot=100,strike=100,years=1,rate=5,dividend=0,vol=20,marketPrice=10.4506,endSpot=102,endVol=22,days=1,costBps=1;
+ bool ready=false;
+ protected override void OnAfterRender(bool firstRender){if(firstRender){ready=true;StateHasChanged();}}
+ bool call=true; string? error; string stamp=""; OptionInput current=new(); PriceResult? result; double? implied; PnlResult? pnl; BacktestResult? backtest;
+ protected override void OnInitialized()=>Calculate();
+ static string F(double x)=>x.ToString("N6",CultureInfo.GetCultureInfo("fr-FR"));
+ void Attempt(Action action){error=null;try{action();}catch(ArgumentException e){error=e.Message;}}
+ void Calculate(){result=null;pnl=null;backtest=null;implied=null;Attempt(()=>{current=new(spot,strike,years,rate/100,dividend/100,vol/100,call);result=BlackScholes.Calculate(current);stamp=DateTimeOffset.UtcNow.ToString("u");});}
+ void Calibrate(){implied=null;Attempt(()=>implied=BlackScholes.ImpliedVolatility(current,marketPrice));}
+ void Explain(){pnl=null;Attempt(()=>{if(!double.IsFinite(days)||days<0||days>current.Years*365)throw new ArgumentException("Nombre de jours incompatible avec la maturité.");pnl=Analytics.Explain(new(current,current with {Spot=endSpot,Volatility=endVol/100,Years=current.Years-days/365}));});}
+ void Hedge(){backtest=null;Attempt(()=>{var spots=Enumerable.Range(0,21).Select(i=>current.Spot*(1+.025*Math.Sin(i*.7)+.001*i)).ToArray();backtest=Analytics.Backtest(new(spots,current.Strike,current.Rate,current.Dividend,current.Volatility,1.0/252,costBps,current.IsCall));});}
+}

@@ -9,3 +9,5 @@ __pycache__/
 !.env.example
 data/private/
 artifacts/
+TestResults/
+.playwright/

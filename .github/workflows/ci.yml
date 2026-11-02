@@ -1,0 +1,35 @@
+name: Build and financial validation
+on: [push, pull_request]
+jobs:
+  validate:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet restore --locked-mode
+      - run: dotnet build --no-restore --configuration Release
+      - run: dotnet test --no-build --configuration Release
+      - run: python research/reference.py
+      - if: runner.os == 'Windows'
+        run: dotnet build src/EquityQuant.Desktop --configuration Release --locked-mode
+      - if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          dotnet run --no-build -c Release --project src/EquityQuant.Api --urls http://127.0.0.1:5080 > /tmp/api.log 2>&1 &
+          api_pid=$!
+          dotnet run --no-build -c Release --project src/EquityQuant.Web --urls http://127.0.0.1:5081 > /tmp/web.log 2>&1 &
+          web_pid=$!
+          trap 'kill "$api_pid" "$web_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:5080/health && curl -fsS http://127.0.0.1:5081 > /dev/null; then break; fi
+            sleep 1
+          done
+          python scripts/smoke.py

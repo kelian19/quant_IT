@@ -30,3 +30,7 @@ Une demande de pricing contient instrument, date de valorisation et snapshot de 
 API proposée : `POST /api/v1/pricing`, `POST /api/v1/scenarios`, `POST /api/v1/pnl-explain` et `GET /health`. Les imports et backtests longs demanderont ultérieurement des tâches annulables avec statut et limites de ressources. Les requêtes de calcul ne déclenchent aucune opération de marché.
 
 Pour le prototype, snapshots JSON/CSV immuables et résultats locaux suffisent. Ajouter une base de données seulement lorsque la persistance multi-utilisateur et les volumes le justifient. Les processus et services devront être redémarrés dans chaque nouvel environnement.
+
+## Version implémentée
+
+Les projets listés existent. Blazor Server appelle directement le moteur et les services Application dans son processus ; WPF consomme REST. Ce choix conserve une seule implémentation des calculs, et permet de démarrer le web seul. Les snapshots d’import sont renvoyés avec un hash et ne sont pas persistés. Voir IMPLEMENTATION.md pour l’écart avec la cible complète.
